@@ -15,7 +15,7 @@ backend = { name = "pixi-build-rattler-build", version = ">=0.3.13" }
 
 [tasks]
 install_raylib = "bash install_raylib.sh"
-test = { cmd = "python test/raylib/test_bindings.py", depends-on = ["install_raylib"] }
+test = { cmd = "python -m unittest discover -s test/raylib -p 'test_*.py'", depends-on = ["install_raylib"] }
 test_raylib = { depends-on = ["test"] }
 example = { cmd = "mojo run -I . examples/raylib_window.mojo .pixi/raylib/lib/libraylib.so", depends-on = ["install_raylib"] }
 test_graphics = { cmd = "python test/graphics.py", depends-on = ["install_raylib"] }

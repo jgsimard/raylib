@@ -27,7 +27,7 @@ Add to your project's `pixi.toml`:
 [workspace]
 name = "my-raylib-app"
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
-platforms = ["linux-64"]
+platforms = [{ platform = "linux-64", glibc = "2.38" }]
 preview = ["pixi-build"]
 
 [dependencies]
@@ -40,9 +40,14 @@ Run `pixi install`, then import without an `-I` option:
 from raylib import Color, Window, Frame, Library, TextFont, Texture2D
 ```
 
-Native raylib is installed separately. Run `pixi run install_raylib` in this
-checkout, then pass the absolute path to `.pixi/raylib/lib/libraylib.so` when
-constructing a `Window` in your application.
+The package also installs the checksum-verified native raylib 6.2 shared library
+in `$CONDA_PREFIX/lib` and its headers in `$CONDA_PREFIX/include`. Applications do
+not need a native installer. Pass `$CONDA_PREFIX/lib/libraylib.so` when constructing
+a `Window` (or supply a custom native library path). The official Linux binary
+requires glibc 2.38 or later, which the package declares as a runtime requirement.
+
+The checkout's `install_raylib.sh` remains a development helper for source-based
+examples and binding generation; it is not needed by consumers of the package.
 
 ## Full C API
 

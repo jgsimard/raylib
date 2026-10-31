@@ -1,6 +1,6 @@
 """Native window ownership, input, and explicit drawing sessions."""
 
-from std.ffi import OwnedDLHandle, c_int, c_uint, external_call
+from std.ffi import OwnedDLHandle, _DLHandle, c_int, c_uint, external_call
 from std.os import abort
 from std.memory import Pointer
 from .types import (
@@ -17,6 +17,7 @@ from .types import (
     Font,
     Material,
     Mesh,
+    Model,
 )
 
 
@@ -92,6 +93,7 @@ struct Window(
             "EndMode3D",
             "DrawBoundingBox",
             "DrawMesh",
+            "DrawModel",
             "UploadMesh",
             "UnloadMesh",
             "GenMeshSphere",
@@ -316,9 +318,9 @@ struct Window(
             if mesh.vao_id == 0:
                 raise Error("could not upload raster mesh")
         except error:
-            self.library.get_function[NoneType]("UnloadMesh")(mesh)
+            mesh^.unload(self.library)
             raise error
-        return mesh
+        return mesh^
 
     def sphere_mesh(
         self, radius: Float32, rings: Int, slices: Int
@@ -367,49 +369,21 @@ struct Window(
             abort(String(t"raylib CloseWindow failed: {error}"))
 
 
-struct Frame(
-    Deinitable where (
-        False,
-        "Call frame^.end() to complete the drawing session",
-    ),
-    Movable,
-):
-    """A drawing session that owns its window until end() returns it."""
+trait _DrawingSession(Movable):
+    def _library(self) -> _DLHandle:
+        ...
 
-    var window: Window
 
-    def __init__(out self, var window: Window):
-        try:
-            window.library.get_function[NoneType]("BeginDrawing")()
-        except error:
-            abort(String(t"raylib BeginDrawing failed: {error}"))
-        self.window = window^
-
-    def end(deinit self) -> Window:
-        """End drawing exactly once and return ownership of the window."""
-        try:
-            self.window.library.get_function[NoneType]("EndDrawing")()
-        except error:
-            abort(String(t"raylib EndDrawing failed: {error}"))
-        return self.window^
-
+trait _Drawing2D(_DrawingSession):
     def clear_background(self, color: Color) raises:
-        self.window.library.get_function[NoneType]("ClearBackground")(color)
+        self._library().call["ClearBackground"](color)
 
     def draw_rectangle(
         self, x: Int, y: Int, width: Int, height: Int, color: Color
     ) raises:
-        self.window.library.get_function[NoneType]("DrawRectangle")(
+        self._library().call["DrawRectangle"](
             c_int(x), c_int(y), c_int(width), c_int(height), color
         )
-
-    def begin_scissor(self, x: Int, y: Int, width: Int, height: Int) raises:
-        self.window.library.get_function[NoneType]("BeginScissorMode")(
-            c_int(x), c_int(y), c_int(width), c_int(height)
-        )
-
-    def end_scissor(self) raises:
-        self.window.library.get_function[NoneType]("EndScissorMode")()
 
     def draw_text_ex(
         self,
@@ -420,7 +394,7 @@ struct Frame(
         size: Int,
         color: Color,
     ) raises:
-        self.window.library.get_function[NoneType]("DrawTextEx")(
+        self._library().call["DrawTextEx"](
             font,
             label.as_c_string_span(),
             Vector2(Float32(x), Float32(y)),
@@ -429,35 +403,8 @@ struct Frame(
             color,
         )
 
-    def begin_3d(self, camera: Camera3D) raises:
-        self.window.library.get_function[NoneType]("BeginMode3D")(camera)
-
-    def set_modelview(self, view: Matrix) raises:
-        self.window.library.get_function[NoneType]("rlSetMatrixModelview")(view)
-
-    def disable_backface_culling(self) raises:
-        self.window.library.get_function[NoneType]("rlDisableBackfaceCulling")()
-
-    def enable_backface_culling(self) raises:
-        self.window.library.get_function[NoneType]("rlEnableBackfaceCulling")()
-
-    def end_3d(self) raises:
-        self.window.library.get_function[NoneType]("EndMode3D")()
-
-    def draw_mesh(
-        self, mesh: Mesh, material: Material, transform: Matrix
-    ) raises:
-        self.window.library.get_function[NoneType]("DrawMesh")(
-            mesh, material, transform
-        )
-
-    def draw_box(self, box: BoundingBox, color: Color) raises:
-        self.window.library.get_function[NoneType]("DrawBoundingBox")(
-            box, color
-        )
-
     def draw_texture(self, texture: Texture, width: Int, height: Int) raises:
-        self.window.library.get_function[NoneType]("DrawTexturePro")(
+        self._library().call["DrawTexturePro"](
             texture,
             Rectangle(0, 0, Float32(texture.width), Float32(texture.height)),
             Rectangle(0, 0, Float32(width), Float32(height)),
@@ -465,3 +412,144 @@ struct Frame(
             Float32(0),
             Color(255, 255, 255, 255),
         )
+
+    def begin_3d(deinit self, camera: Camera3D) -> Scene3D[Self]:
+        return Scene3D[Self](self^, camera)
+
+
+trait _Drawing3D(_DrawingSession):
+    def set_modelview(self, view: Matrix) raises:
+        self._library().call["rlSetMatrixModelview"](view)
+
+    def disable_backface_culling(self) raises:
+        self._library().call["rlDisableBackfaceCulling"]()
+
+    def enable_backface_culling(self) raises:
+        self._library().call["rlEnableBackfaceCulling"]()
+
+    def draw_mesh(
+        self, mesh: Mesh, material: Material, transform: Matrix
+    ) raises:
+        self._library().call["DrawMesh"](mesh, material, transform)
+
+    def draw_model(
+        self, model: Model, position: Vector3, scale: Float32, tint: Color
+    ) raises:
+        self._library().call["DrawModel"](model, position, scale, tint)
+
+    def draw_box(self, box: BoundingBox, color: Color) raises:
+        self._library().call["DrawBoundingBox"](box, color)
+
+
+struct Frame(
+    Deinitable where (
+        False,
+        "Call frame^.end() to complete the drawing session",
+    ),
+    Movable,
+    _Drawing2D,
+):
+    """A drawing session that owns its window until end() returns it."""
+
+    var window: Window
+
+    def __init__(out self, var window: Window):
+        # Window checked every session symbol before creating the context.
+        window.library.borrow().call["BeginDrawing"]()
+        self.window = window^
+
+    def _library(self) -> _DLHandle:
+        # Only used synchronously while this session owns the library.
+        return self.window.library.borrow()
+
+    def end(deinit self) -> Window:
+        self._library().call["EndDrawing"]()
+        return self.window^
+
+    def begin_scissor(
+        deinit self, x: Int, y: Int, width: Int, height: Int
+    ) -> ScissorFrame:
+        return ScissorFrame(self^, x, y, width, height)
+
+
+struct ScissorFrame(
+    Deinitable where (False, "Call scissor^.end() to end scissor mode"),
+    Movable,
+    _Drawing2D,
+):
+    """A clipped 2D session; end() returns its parent frame."""
+
+    var _frame: Frame
+
+    def __init__(
+        out self, var frame: Frame, x: Int, y: Int, width: Int, height: Int
+    ):
+        frame._library().call["BeginScissorMode"](
+            c_int(x), c_int(y), c_int(width), c_int(height)
+        )
+        self._frame = frame^
+
+    def _library(self) -> _DLHandle:
+        return self._frame._library()
+
+    def end(deinit self) -> Frame:
+        self._library().call["EndScissorMode"]()
+        return self._frame^
+
+
+struct Scene3D[Parent: _Drawing2D](
+    Deinitable where (False, "Call scene^.end() to end 3D mode"),
+    Movable,
+    _Drawing3D,
+):
+    """A 3D session; end() returns its frame or clipped 2D parent."""
+
+    var _parent: Self.Parent
+
+    def __init__(out self, var parent: Self.Parent, camera: Camera3D):
+        parent._library().call["BeginMode3D"](camera)
+        self._parent = parent^
+
+    def _library(self) -> _DLHandle:
+        return self._parent._library()
+
+    def end(deinit self) -> Self.Parent:
+        self._library().call["EndMode3D"]()
+        return self._parent^
+
+    def begin_scissor(
+        deinit self, x: Int, y: Int, width: Int, height: Int
+    ) -> Scissor3D[Self.Parent]:
+        comptime assert Self.Parent == Frame, "Scissor mode is already active"
+        return Scissor3D[Self.Parent](self^, x, y, width, height)
+
+
+struct Scissor3D[Parent: _Drawing2D](
+    Deinitable where (False, "Call scissor^.end() to end scissor mode"),
+    Movable,
+    _Drawing3D,
+):
+    """A clipped 3D session; end() returns the enclosing 3D session."""
+
+    var _scene: Scene3D[Self.Parent]
+
+    def __init__(
+        out self,
+        var scene: Scene3D[Self.Parent],
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+    ):
+        comptime assert Self.Parent == Frame, "Scissor mode is already active"
+        scene._library().call["BeginScissorMode"](
+            c_int(x), c_int(y), c_int(width), c_int(height)
+        )
+        self._scene = scene^
+
+    def _library(self) -> _DLHandle:
+        return self._scene._library()
+
+    def end(deinit self) -> Scene3D[Self.Parent]:
+        self._library().call["EndScissorMode"]()
+        return self._scene^

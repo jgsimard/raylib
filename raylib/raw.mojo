@@ -4386,17 +4386,17 @@ struct Raylib:
         """Load model from files (meshes and materials)"""
         return self.LoadModel(UInt(Int(file_name.as_c_string_span().ptr())))
 
-    def LoadModelFromMesh(self, mesh: Mesh) raises -> Model:
+    def LoadModelFromMesh(self, var mesh: Mesh) raises -> Model:
         """Load model from generated mesh (default material)"""
-        return self.handle.get_function[Model]("LoadModelFromMesh")(mesh)
+        return mesh^.into_model(self.handle)
 
     def IsModelValid(self, model: Model) raises -> Bool:
         """Check if model is valid (loaded in GPU, VAO/VBOs)"""
         return self.handle.get_function[Bool]("IsModelValid")(model)
 
-    def UnloadModel(self, model: Model) raises:
+    def UnloadModel(self, var model: Model):
         """Unload model (including meshes) from memory (RAM and/or VRAM)"""
-        self.handle.get_function[NoneType]("UnloadModel")(model)
+        model^.unload(self.handle)
 
     def GetModelBoundingBox(self, model: Model) raises -> BoundingBox:
         """Compute model bounding box limits (considers all meshes)"""
@@ -4514,9 +4514,9 @@ struct Raylib:
             mesh, index, data, data_size, offset
         )
 
-    def UnloadMesh(self, mesh: Mesh) raises:
+    def UnloadMesh(self, var mesh: Mesh):
         """Unload mesh data from CPU and GPU"""
-        self.handle.get_function[NoneType]("UnloadMesh")(mesh)
+        mesh^.unload(self.handle)
 
     def DrawMesh(
         self, mesh: Mesh, material: Material, transform: Matrix

@@ -1,4 +1,4 @@
-"""Public raylib 6.2 bindings and linear window/frame owners.
+"""Public raylib 6.2 bindings with linear sessions, meshes, and models.
 
 Raylib exposes the C API. Texture2D owns a texture; NativeTexture2D is its
 non-owning C ABI layout. Constants are exposed through explicit namespaces such as KEY and PIXELFORMAT.
@@ -7,7 +7,7 @@ non-owning C ABI layout. Constants are exposed through explicit namespaces such 
 from .library import Library
 from .raw import Raylib
 from .resources import TextFont, Texture2D
-from .window import Window, Frame
+from .window import Window, Frame, ScissorFrame, Scene3D, Scissor3D
 from .abi import Texture2D as NativeTexture2D
 
 # Native layouts, aliases, callback addresses, and enum types.

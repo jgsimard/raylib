@@ -2,7 +2,7 @@
 
 from std.ffi import OwnedDLHandle, c_int
 from std.memory import Pointer
-from .types import Color, Material, MaterialMap, Mesh, Shader
+from .types import Color, Material, MaterialMap, Mesh, Model, Shader
 
 
 struct Library:
@@ -50,8 +50,14 @@ struct Library:
         )
         maps[unsafe_offset=map_index].color = color
 
-    def unload_mesh(self, mesh: Mesh) raises:
-        self.handle.get_function[NoneType]("UnloadMesh")(mesh)
+    def unload_mesh(self, var mesh: Mesh):
+        mesh^.unload(self.handle)
+
+    def model_from_mesh(self, var mesh: Mesh) raises -> Model:
+        return mesh^.into_model(self.handle)
+
+    def unload_model(self, var model: Model):
+        model^.unload(self.handle)
 
     def unload_material(self, material: Material) raises:
         self.handle.get_function[NoneType]("UnloadMaterial")(material)

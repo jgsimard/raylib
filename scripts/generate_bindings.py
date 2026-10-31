@@ -13,7 +13,7 @@ HEADER = ROOT / '.pixi/raylib/include/raylib.h'
 EXISTING = {
     'Color', 'Vector2', 'Vector3', 'Camera3D', 'Matrix', 'Rectangle',
     'FilePathList', 'BoundingBox', 'Image', 'Texture', 'Font', 'Shader',
-    'MaterialMap', 'Material', 'Mesh',
+    'MaterialMap', 'Material', 'Mesh', 'ModelSkeleton', 'Model',
 }
 SCALARS = {
     'void': 'NoneType', 'bool': 'Bool', 'char': 'c_char',
@@ -163,7 +163,7 @@ class Header:
 
 
 def render(header):
-    abi = [BANNER, '"""Non-owning raylib C ABI types. Fixed C arrays use homogeneous tuples."""',
+    abi = [BANNER, '"""Raylib C ABI types. Mesh/Model are linear; fixed arrays use tuples."""',
            'from std.ffi import c_char, c_int, c_uint',
            'from .types import ' + ', '.join(sorted(EXISTING)), '']
     for name, fields in header.structs.items():
@@ -216,6 +216,19 @@ def render(header):
            '    var handle: OwnedDLHandle', '',
            '    def __init__(out self, path: String) raises:', '        self.handle = OwnedDLHandle(path)', '']
     for f in header.functions:
+        # These C calls consume native ownership, even though C passes structs
+        # by value. Use the same linear types as the higher-level API.
+        if f.name in ('UnloadMesh', 'UnloadModel'):
+            resource = 'mesh' if f.name == 'UnloadMesh' else 'model'
+            raw += [f'    def {f.name}(self, var {resource}: {resource.title()}):',
+                    f'        """{f.doc}"""',
+                    f'        {resource}^.unload(self.handle)', '']
+            continue
+        if f.name == 'LoadModelFromMesh':
+            raw += ['    def LoadModelFromMesh(self, var mesh: Mesh) raises -> Model:',
+                    f'        """{f.doc}"""',
+                    '        return mesh^.into_model(self.handle)', '']
+            continue
         arg_names = [snake(a.name) for a in f.args]
         strings = [i for i, a in enumerate(f.args) if a.ctype == 'const char *']
         result = header.mojo_type(f.result)
@@ -254,7 +267,8 @@ def render(header):
                    ['RAYLIB_VERSION', 'RAYLIB_VERSION_MAJOR', 'RAYLIB_VERSION_MINOR', 'RAYLIB_VERSION_PATCH', 'PI', 'DEG2RAD', 'RAD2DEG']
                    + list(CONSTANT_GROUPS)
                    + list(header.constants) + list(header.colors)),
-               'from .raw import Raylib', 'from .window import Window, Frame',
+               'from .raw import Raylib',
+               'from .window import Window, Frame, ScissorFrame, Scene3D, Scissor3D',
                'from .resources import TextFont, Texture2D', 'from .library import Library']
     license_text = header.text[header.text.index('/*'):header.text.index('*/') + 2]
     return {'abi.mojo': '\n'.join(abi) + '\n', 'constants.mojo': '\n'.join(constants) + '\n',

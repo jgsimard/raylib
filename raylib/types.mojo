@@ -1,6 +1,6 @@
-"""Raylib 6.2 C ABI layouts. These structs do not own native resources."""
+"""Raylib 6.2 C layouts. Mesh and Model require explicit consumption."""
 
-from std.ffi import c_int, c_uint
+from std.ffi import OwnedDLHandle, c_int, c_uint
 
 
 @fieldwise_init
@@ -132,7 +132,14 @@ struct Material(ImplicitlyCopyable, RegisterPassable):
 
 
 @fieldwise_init
-struct Mesh(ImplicitlyCopyable, RegisterPassable):
+struct Mesh(
+    Deinitable where (
+        False,
+        "Unload this mesh or transfer it into a model",
+    ),
+    Movable,
+    RegisterPassable,
+):
     """Raylib 6.2 mesh ABI; native-size integers hold opaque C addresses."""
 
     var vertex_count: c_int
@@ -169,3 +176,43 @@ struct Mesh(ImplicitlyCopyable, RegisterPassable):
         self.anim_normals = 0
         self.vao_id = 0
         self.vbo_id = 0
+
+    def unload(deinit self, library: OwnedDLHandle):
+        """Consume this mesh and free its CPU/GPU allocations."""
+        library.borrow().call["UnloadMesh"](self)
+
+    def into_model(deinit self, library: OwnedDLHandle) raises -> Model:
+        """Transfer the mesh's allocations to a model without unloading them."""
+        for symbol in ["LoadModelFromMesh", "UnloadModel"]:
+            if not library.check_symbol(symbol):
+                self^.unload(library)
+                raise Error("raylib is missing symbol: " + symbol)
+        return library.borrow().call["LoadModelFromMesh", Model](self)
+
+
+@fieldwise_init
+struct ModelSkeleton(ImplicitlyCopyable, RegisterPassable):
+    var bone_count: c_uint
+    var bones: UInt
+    var bind_pose: UInt
+
+
+@fieldwise_init
+struct Model(
+    Deinitable where (False, "Unload this model to release its meshes"),
+    Movable,
+    RegisterPassable,
+):
+    var transform: Matrix
+    var mesh_count: c_int
+    var material_count: c_int
+    var meshes: UInt
+    var materials: UInt
+    var mesh_material: UInt
+    var skeleton: ModelSkeleton
+    var current_pose: UInt
+    var bone_matrices: UInt
+
+    def unload(deinit self, library: OwnedDLHandle):
+        """Consume this model and release its native allocations."""
+        library.borrow().call["UnloadModel"](self)

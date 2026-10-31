@@ -1,0 +1,22 @@
+context:
+  version: "0.1.0"
+
+package:
+  name: raylib
+  version: ${{ version }}
+
+source:
+  path: raylib
+  target_directory: raylib
+
+build:
+  script:
+    - mkdir -p "$PREFIX/lib/mojo"
+    - cp -R raylib "$PREFIX/lib/mojo/"
+
+requirements:
+  run:
+    - mojo ==1.3.0.dev2026103105
+
+about:
+  summary: Mojo bindings for a subset of the raylib 6.2 API

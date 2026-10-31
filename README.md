@@ -16,8 +16,8 @@ pixi run example
 ```
 
 This installs the pinned native raylib release and opens a window for two seconds.
-See [the example](examples/raylib_window.mojo) for a complete drawing loop with
-error handling. Graphics require a working display and OpenGL context.
+See [the example](examples/raylib_window.mojo) for a complete drawing loop.
+Graphics require a working display and OpenGL context.
 
 ## Use in another project
 
@@ -108,6 +108,11 @@ the window; linearity does not itself enforce the graphics context's lifetime.
 
 Raw `Raylib` begin/end/close methods do not enforce the drawing protocol; avoid
 mixing them with the linear session methods.
+
+Window construction checks its native symbols up front. Drawing, input queries,
+window actions, and file/path queries then use non-raising calls, so a simple
+drawing loop needs no error-unwinding branches. Allocation and input validation
+still raise, as do lazy symbol lookups in `Raylib` and `Library`.
 
 `TextFont` and `Texture2D` clean up automatically. Destroy them and unload native
 meshes, models, materials, and shaders before closing the window. Other ABI

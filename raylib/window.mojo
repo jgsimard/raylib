@@ -1,7 +1,6 @@
 """Native window ownership, input, and explicit drawing sessions."""
 
 from std.ffi import OwnedDLHandle, _DLHandle, c_int, c_uint, external_call
-from std.os import abort
 from std.memory import Pointer
 from .types import (
     Color,
@@ -122,17 +121,17 @@ struct Window(
         for symbol in symbols:
             if not library.check_symbol(symbol):
                 raise Error("raylib is missing symbol: " + symbol)
-        library.get_function[NoneType]("SetTraceLogLevel")(c_int(4))
-        library.get_function[NoneType]("SetConfigFlags")(c_uint(flags))
-        library.get_function[NoneType]("InitWindow")(
+        library.call["SetTraceLogLevel"](c_int(4))
+        library.call["SetConfigFlags"](c_uint(flags))
+        library.call["InitWindow"](
             c_int(width),
             c_int(height),
             title.as_c_string_span(),
         )
-        if not library.get_function[Bool]("IsWindowReady")():
-            library.get_function[NoneType]("CloseWindow")()
+        if not library.call["IsWindowReady", Bool]():
+            library.call["CloseWindow"]()
             raise Error("raylib could not initialize the window")
-        library.get_function[NoneType]("SetTargetFPS")(c_int(fps))
+        library.call["SetTargetFPS"](c_int(fps))
 
         self.library = library^
 
@@ -142,134 +141,116 @@ struct Window(
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
 
-    def should_close(self) raises -> Bool:
-        return self.library.get_function[Bool]("WindowShouldClose")()
+    def should_close(self) -> Bool:
+        return self.library.call["WindowShouldClose", Bool]()
 
-    def is_key_down(self, key: Int) raises -> Bool:
-        return self.library.get_function[Bool]("IsKeyDown")(c_int(key))
+    def is_key_down(self, key: Int) -> Bool:
+        return self.library.call["IsKeyDown", Bool](c_int(key))
 
-    def is_key_pressed(self, key: Int) raises -> Bool:
-        return self.library.get_function[Bool]("IsKeyPressed")(c_int(key))
+    def is_key_pressed(self, key: Int) -> Bool:
+        return self.library.call["IsKeyPressed", Bool](c_int(key))
 
-    def set_exit_key(self, key: Int) raises:
-        self.library.get_function[NoneType]("SetExitKey")(c_int(key))
+    def set_exit_key(self, key: Int):
+        self.library.call["SetExitKey"](c_int(key))
 
-    def mouse_position(self) raises -> Vector2:
-        return self.library.get_function[Vector2]("GetMousePosition")()
+    def mouse_position(self) -> Vector2:
+        return self.library.call["GetMousePosition", Vector2]()
 
-    def mouse_pressed(self) raises -> Bool:
-        return self.library.get_function[Bool]("IsMouseButtonPressed")(c_int(0))
+    def mouse_pressed(self) -> Bool:
+        return self.library.call["IsMouseButtonPressed", Bool](c_int(0))
 
-    def mouse_wheel(self) raises -> Float32:
-        return self.library.get_function[Float32]("GetMouseWheelMove")()
+    def mouse_wheel(self) -> Float32:
+        return self.library.call["GetMouseWheelMove", Float32]()
 
-    def time(self) raises -> Float64:
-        return self.library.get_function[Float64]("GetTime")()
+    def time(self) -> Float64:
+        return self.library.call["GetTime", Float64]()
 
-    def clipboard_text(self) raises -> String:
-        return _copy_c_string(
-            self.library.get_function[UInt]("GetClipboardText")()
-        )
+    def clipboard_text(self) -> String:
+        return _copy_c_string(self.library.call["GetClipboardText", UInt]())
 
-    def directory_exists(self, var path: String) raises -> Bool:
-        return self.library.get_function[Bool]("DirectoryExists")(
+    def directory_exists(self, var path: String) -> Bool:
+        return self.library.call["DirectoryExists", Bool](
             path.as_c_string_span()
         )
 
-    def file_exists(self, var path: String) raises -> Bool:
-        return self.library.get_function[Bool]("FileExists")(
+    def file_exists(self, var path: String) -> Bool:
+        return self.library.call["FileExists", Bool](path.as_c_string_span())
+
+    def directory_path(self, var path: String) -> String:
+        return _copy_c_string(
+            self.library.call["GetDirectoryPath", UInt](path.as_c_string_span())
+        )
+
+    def parent_directory(self, var path: String) -> String:
+        return _copy_c_string(
+            self.library.call["GetPrevDirectoryPath", UInt](
+                path.as_c_string_span()
+            )
+        )
+
+    def file_name(self, var path: String) -> String:
+        return _copy_c_string(
+            self.library.call["GetFileName", UInt](path.as_c_string_span())
+        )
+
+    def file_extension(self, var path: String) -> String:
+        return _copy_c_string(
+            self.library.call["GetFileExtension", UInt](path.as_c_string_span())
+        )
+
+    def directory_files(self, var path: String) -> List[String]:
+        var files = self.library.call["LoadDirectoryFiles", FilePathList](
             path.as_c_string_span()
         )
-
-    def directory_path(self, var path: String) raises -> String:
-        return _copy_c_string(
-            self.library.get_function[UInt]("GetDirectoryPath")(
-                path.as_c_string_span()
-            )
-        )
-
-    def parent_directory(self, var path: String) raises -> String:
-        return _copy_c_string(
-            self.library.get_function[UInt]("GetPrevDirectoryPath")(
-                path.as_c_string_span()
-            )
-        )
-
-    def file_name(self, var path: String) raises -> String:
-        return _copy_c_string(
-            self.library.get_function[UInt]("GetFileName")(
-                path.as_c_string_span()
-            )
-        )
-
-    def file_extension(self, var path: String) raises -> String:
-        return _copy_c_string(
-            self.library.get_function[UInt]("GetFileExtension")(
-                path.as_c_string_span()
-            )
-        )
-
-    def directory_files(self, var path: String) raises -> List[String]:
-        var files = self.library.get_function[FilePathList](
-            "LoadDirectoryFiles"
-        )(path.as_c_string_span())
         var result = List[String](capacity=Int(files.count))
         var paths = Pointer[UInt, MutUntrackedOrigin](
             unsafe_from_address=Int(files.paths)
         )
         for index in range(Int(files.count)):
             result.append(_copy_c_string(paths[unsafe_offset=index]))
-        self.library.get_function[NoneType]("UnloadDirectoryFiles")(files)
+        self.library.call["UnloadDirectoryFiles"](files)
         return result^
 
-    def dropped_files(self) raises -> List[String]:
+    def dropped_files(self) -> List[String]:
         var result = List[String]()
-        if self.library.get_function[Bool]("IsFileDropped")():
-            var files = self.library.get_function[FilePathList](
-                "LoadDroppedFiles"
-            )()
+        if self.library.call["IsFileDropped", Bool]():
+            var files = self.library.call["LoadDroppedFiles", FilePathList]()
             var paths = Pointer[UInt, MutUntrackedOrigin](
                 unsafe_from_address=Int(files.paths)
             )
             for index in range(Int(files.count)):
                 result.append(_copy_c_string(paths[unsafe_offset=index]))
-            self.library.get_function[NoneType]("UnloadDroppedFiles")(files)
+            self.library.call["UnloadDroppedFiles"](files)
         return result^
 
-    def toggle_fullscreen(self) raises:
-        self.library.get_function[NoneType]("ToggleFullscreen")()
+    def toggle_fullscreen(self):
+        self.library.call["ToggleFullscreen"]()
 
-    def frame_time(self) raises -> Float32:
-        return self.library.get_function[Float32]("GetFrameTime")()
+    def frame_time(self) -> Float32:
+        return self.library.call["GetFrameTime", Float32]()
 
-    def mouse_delta(self) raises -> Vector2:
-        return self.library.get_function[Vector2]("GetMouseDelta")()
+    def mouse_delta(self) -> Vector2:
+        return self.library.call["GetMouseDelta", Vector2]()
 
-    def mouse_down(self, button: Int = 0) raises -> Bool:
-        return self.library.get_function[Bool]("IsMouseButtonDown")(
-            c_int(button)
-        )
+    def mouse_down(self, button: Int = 0) -> Bool:
+        return self.library.call["IsMouseButtonDown", Bool](c_int(button))
 
-    def width(self) raises -> Int:
-        return Int(self.library.get_function[c_int]("GetScreenWidth")())
+    def width(self) -> Int:
+        return Int(self.library.call["GetScreenWidth", c_int]())
 
-    def height(self) raises -> Int:
-        return Int(self.library.get_function[c_int]("GetScreenHeight")())
+    def height(self) -> Int:
+        return Int(self.library.call["GetScreenHeight", c_int]())
 
-    def resize(self, width: Int, height: Int) raises:
-        self.library.get_function[NoneType]("SetWindowSize")(
-            c_int(width), c_int(height)
-        )
+    def resize(self, width: Int, height: Int):
+        self.library.call["SetWindowSize"](c_int(width), c_int(height))
 
-    def screenshot(self, var path: String) raises:
-        self.library.get_function[NoneType]("TakeScreenshot")(
-            path.as_c_string_span()
-        )
+    def screenshot(self, var path: String):
+        self.library.call["TakeScreenshot"](path.as_c_string_span())
 
     def allocate(self, size: Int) raises -> UInt:
         if size <= 0 or UInt64(size) > UInt64(UInt32.MAX):
             raise Error("raylib allocation exceeds its 32-bit size limit")
-        var address = self.library.get_function[UInt]("MemAlloc")(c_uint(size))
+        var address = self.library.call["MemAlloc", UInt](c_uint(size))
         if address == 0:
             raise Error("raylib memory allocation failed")
         return address
@@ -312,9 +293,7 @@ struct Window(
                 ),
                 length=len(colors),
             ).copy_from(colors)
-            self.library.get_function[NoneType]("UploadMesh")(
-                Pointer(to=mesh), False
-            )
+            self.library.call["UploadMesh"](Pointer(to=mesh), False)
             if mesh.vao_id == 0:
                 raise Error("could not upload raster mesh")
         except error:
@@ -322,10 +301,8 @@ struct Window(
             raise error
         return mesh^
 
-    def sphere_mesh(
-        self, radius: Float32, rings: Int, slices: Int
-    ) raises -> Mesh:
-        return self.library.get_function[Mesh]("GenMeshSphere")(
+    def sphere_mesh(self, radius: Float32, rings: Int, slices: Int) -> Mesh:
+        return self.library.call["GenMeshSphere", Mesh](
             radius, c_int(rings), c_int(slices)
         )
 
@@ -341,9 +318,7 @@ struct Window(
             c_int(1),
             c_int(7),
         )
-        var texture = self.library.get_function[Texture](
-            "LoadTextureFromImage"
-        )(image)
+        var texture = self.library.call["LoadTextureFromImage", Texture](image)
         if texture.id == 0:
             raise Error("could not upload display texture")
         return texture
@@ -353,9 +328,7 @@ struct Window(
     ) raises:
         if len(pixels) != Int(texture.width) * Int(texture.height) * 4:
             raise Error("texture update dimensions do not match")
-        self.library.get_function[NoneType]("UpdateTexture")(
-            texture, pixels.unsafe_ptr()
-        )
+        self.library.call["UpdateTexture"](texture, pixels.unsafe_ptr())
 
     def begin_drawing(deinit self) -> Frame:
         """Transfer this window into a unique drawing session."""
@@ -363,10 +336,7 @@ struct Window(
 
     def close(deinit self):
         """Consume the window owner; its handle cannot be reused afterward."""
-        try:
-            self.library.get_function[NoneType]("CloseWindow")()
-        except error:
-            abort(String(t"raylib CloseWindow failed: {error}"))
+        self.library.call["CloseWindow"]()
 
 
 trait _DrawingSession(Movable):
@@ -375,12 +345,12 @@ trait _DrawingSession(Movable):
 
 
 trait _Drawing2D(_DrawingSession):
-    def clear_background(self, color: Color) raises:
+    def clear_background(self, color: Color):
         self._library().call["ClearBackground"](color)
 
     def draw_rectangle(
         self, x: Int, y: Int, width: Int, height: Int, color: Color
-    ) raises:
+    ):
         self._library().call["DrawRectangle"](
             c_int(x), c_int(y), c_int(width), c_int(height), color
         )
@@ -393,7 +363,7 @@ trait _Drawing2D(_DrawingSession):
         y: Int,
         size: Int,
         color: Color,
-    ) raises:
+    ):
         self._library().call["DrawTextEx"](
             font,
             label.as_c_string_span(),
@@ -403,7 +373,7 @@ trait _Drawing2D(_DrawingSession):
             color,
         )
 
-    def draw_texture(self, texture: Texture, width: Int, height: Int) raises:
+    def draw_texture(self, texture: Texture, width: Int, height: Int):
         self._library().call["DrawTexturePro"](
             texture,
             Rectangle(0, 0, Float32(texture.width), Float32(texture.height)),
@@ -418,26 +388,24 @@ trait _Drawing2D(_DrawingSession):
 
 
 trait _Drawing3D(_DrawingSession):
-    def set_modelview(self, view: Matrix) raises:
+    def set_modelview(self, view: Matrix):
         self._library().call["rlSetMatrixModelview"](view)
 
-    def disable_backface_culling(self) raises:
+    def disable_backface_culling(self):
         self._library().call["rlDisableBackfaceCulling"]()
 
-    def enable_backface_culling(self) raises:
+    def enable_backface_culling(self):
         self._library().call["rlEnableBackfaceCulling"]()
 
-    def draw_mesh(
-        self, mesh: Mesh, material: Material, transform: Matrix
-    ) raises:
+    def draw_mesh(self, mesh: Mesh, material: Material, transform: Matrix):
         self._library().call["DrawMesh"](mesh, material, transform)
 
     def draw_model(
         self, model: Model, position: Vector3, scale: Float32, tint: Color
-    ) raises:
+    ):
         self._library().call["DrawModel"](model, position, scale, tint)
 
-    def draw_box(self, box: BoundingBox, color: Color) raises:
+    def draw_box(self, box: BoundingBox, color: Color):
         self._library().call["DrawBoundingBox"](box, color)
 
 

@@ -29,11 +29,14 @@ class LinearBindingsTests(unittest.TestCase):
         implemented = set(re.findall(r"^(?:void|bool|int|Mesh|Model)\s+\**(\w+)\(", native, re.M))
         for i, symbol in enumerate(symbols):
             if symbol not in implemented:
-                native += f'\nvoid stub_{i}(void) __asm__("{symbol}");\nvoid stub_{i}(void) {{}}\n'
+                stub = f'\nvoid stub_{i}(void) __asm__("{symbol}");\nvoid stub_{i}(void) {{}}\n'
+                if symbol == "SetConfigFlags":
+                    stub = "\n#ifndef OMIT_WINDOW_SYMBOL\n" + stub + "#endif\n"
+                native += stub
         source = cls.directory / "native.c"
         source.write_text(native)
         cls.libraries = []
-        for variant in (None, "OMIT_LOAD_MODEL", "OMIT_UNLOAD_MODEL"):
+        for variant in (None, "OMIT_LOAD_MODEL", "OMIT_UNLOAD_MODEL", "OMIT_WINDOW_SYMBOL"):
             library = cls.directory / f"{variant or 'complete'}.so"
             command = ["cc", "-shared", "-fPIC", "-I", str(ROOT / ".pixi/raylib/include")]
             if variant:
@@ -56,7 +59,106 @@ class LinearBindingsTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
-        run = subprocess.run([str(executable), *map(str, self.libraries)], capture_output=True, text=True)
+        run = subprocess.run([str(executable), *map(str, self.libraries[:3])], capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+    def test_nonraising_window_and_drawing(self):
+        # A linear Window cannot cross a throwing call without cleanup. This
+        # helper deliberately has no raises annotation or error branches.
+        result = self.compile('''\
+            from raylib import (
+                Window, Camera3D, Vector3, Color, BoundingBox, Material, Shader,
+                Matrix, Font, Texture, Model, Raylib,
+            )
+
+            def exercise(var window: Window, model: Model) -> Window:
+                _ = window.should_close()
+                _ = window.is_key_down(0)
+                _ = window.is_key_pressed(0)
+                window.set_exit_key(0)
+                _ = window.mouse_position()
+                _ = window.mouse_pressed()
+                _ = window.mouse_wheel()
+                _ = window.time()
+                _ = window.clipboard_text()
+                _ = window.directory_exists(".")
+                _ = window.file_exists("file")
+                _ = window.directory_path("file")
+                _ = window.parent_directory(".")
+                _ = window.file_name("file")
+                _ = window.file_extension("file")
+                _ = window.directory_files(".")
+                _ = window.dropped_files()
+                window.toggle_fullscreen()
+                _ = window.frame_time()
+                _ = window.mouse_delta()
+                _ = window.mouse_down()
+                _ = window.width()
+                _ = window.height()
+                window.resize(64, 64)
+                window.screenshot("frame.png")
+                var mesh = window.sphere_mesh(1, 8, 8)
+                var frame = window^.begin_drawing()
+                frame.clear_background(Color(42, 0, 0, 255))
+                var clip = frame^.begin_scissor(0, 0, 32, 32)
+                clip.draw_rectangle(0, 0, 16, 16, Color(42, 0, 0, 255))
+                clip.draw_texture(Texture(0, 1, 1, 1, 7), 1, 1)
+                clip.draw_text_ex(
+                    Font(1, 0, 0, Texture(0, 1, 1, 1, 7), 0, 0),
+                    "label", 0, 0, 12, Color(42, 0, 0, 255),
+                )
+                var scene = clip^.begin_3d(Camera3D(
+                    Vector3(0, 0, 1), Vector3(0, 0, 0), Vector3(0, 1, 0), 45, 0,
+                ))
+                var identity = Matrix(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1)
+                scene.set_modelview(identity)
+                scene.disable_backface_culling()
+                scene.enable_backface_culling()
+                scene.draw_mesh(mesh, Material(Shader(0,0), 0,0,0,0,0), identity)
+                scene.draw_model(model, Vector3(0,0,0), 1, Color(42,0,0,255))
+                scene.draw_box(
+                    BoundingBox(Vector3(0,0,0), Vector3(1,1,1)), Color(42,0,0,255),
+                )
+                clip = scene^.end()
+                frame = clip^.end()
+                window = frame^.end()
+                mesh^.unload(window.library)
+                return window^
+
+            def main() raises:
+                var api = Raylib("not-run")
+                var model = api.LoadModel("not-run")
+                try:
+                    var window = Window("not-run", 64, 64, "linear", 60)
+                    window = exercise(window^, model)
+                    window^.close()
+                except error:
+                    api.UnloadModel(model^)
+                    raise error
+                api.UnloadModel(model^)
+        ''', "nonraising")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_missing_window_symbol_raises_before_initialization(self):
+        result = self.compile('''\
+            from std.sys.arg import argv
+            from std.testing import assert_true
+            from raylib import Window
+
+            def main() raises:
+                var failed = False
+                try:
+                    var window = Window(argv()[1], 64, 64, "linear", 60)
+                    window^.close()
+                except:
+                    failed = True
+                assert_true(failed)
+        ''', "missing_window_symbol")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        run = subprocess.run(
+            [str(self.directory / "missing_window_symbol"), str(self.libraries[3])],
+            capture_output=True, text=True,
+        )
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_invalid_resource_lifetimes(self):

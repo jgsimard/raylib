@@ -4,7 +4,7 @@ Mojo bindings for raylib 6.2: all 619 functions in `raylib.h`, 35 C structs,
 enum constants, and colors. Covers graphics, images, models and animation,
 collisions, input, audio, and utilities. Loads native raylib at runtime.
 
-Supports Linux x86-64 with Mojo `1.3.0.dev2026103105`.
+Supports Linux x86-64 with Mojo `1.3.0.dev2026110405`.
 
 ## Quick start
 

@@ -26,7 +26,7 @@ requirements:
   host:
     - xorg-libx11
   run:
-    - mojo ==1.3.0.dev2026110205
+    - mojo ==1.3.0.dev2026110405
     - xorg-libx11
     - __glibc >=2.38
 

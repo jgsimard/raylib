@@ -26,7 +26,8 @@ requirements:
   host:
     - xorg-libx11
   run:
-    - mojo ==1.3.0.dev2026110405
+    # Bindings ship as Mojo source; allow newer compilers in the same major.
+    - mojo >=1.3.0.dev2026110405,<2
     - xorg-libx11
     - __glibc >=2.38
 

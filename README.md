@@ -4,7 +4,8 @@ Mojo bindings for raylib 6.2: all 619 functions in `raylib.h`, 35 C structs,
 enum constants, and colors. Covers graphics, images, models and animation,
 collisions, input, audio, and utilities. Loads native raylib at runtime.
 
-Supports Linux x86-64 with Mojo `1.3.0.dev2026110405`.
+Supports Linux x86-64 with Mojo `>=1.3.0.dev2026110405,<2`.
+The exact compiler used by this checkout is recorded in `pixi.lock`.
 
 ## Quick start
 
@@ -18,6 +19,24 @@ pixi run example
 This installs the pinned native raylib release and opens a window for two seconds.
 See [the example](examples/raylib_window.mojo) for a complete drawing loop.
 Graphics require a working display and OpenGL context.
+
+## Updating Mojo
+
+```bash
+pixi run update_toolchain
+pixi run test
+```
+
+The update task runs `pixi upgrade mojo`: it updates the Mojo requirement and
+lockfile and installs the newest compatible nightly. Commit `pixi.toml` and
+`pixi.lock` after checking compatibility. If the current environment cannot
+start, run `pixi upgrade mojo` directly.
+
+The package ships Mojo source and declares a minimum compiler version within
+the supported major version, rather than pinning one nightly. Consumers such as
+Bajo can upgrade Mojo independently without a raylib recipe change or release.
+Raise the recipe's minimum only when the bindings start requiring a newer
+compiler; update the supported range above at the same time.
 
 ## Use in another project
 
